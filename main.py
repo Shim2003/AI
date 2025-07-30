@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
 #DATA LOADING
 df = pd.read_csv('heart_statlog_cleveland_hungary_final.csv')
@@ -36,5 +37,21 @@ correlation_matrix = df.corr()
 sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
 plt.title('Correlation Heatmap')
 plt.show()
+
+# Boxplot to visualize scale differences
+numeric_columns = ['age', 'resting bp s', 'cholesterol', 'max heart rate', 'oldpeak']
+
+plt.figure(figsize=(10, 6))
+df[numeric_columns].boxplot()
+plt.title('Boxplot of Numeric Features')
+plt.ylabel('Value Range')
+plt.xticks(rotation=45)
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# Also print basic statistics to support the plot
+print("Feature Ranges (Summary):")
+print(df[numeric_columns].describe())
 
 #ui
