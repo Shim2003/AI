@@ -57,3 +57,6 @@ print("\nConfusion Matrix:\n", confusion_matrix(y_test, y_pred))
 
 # 10. Save the model
 joblib.dump(pipeline, 'heart_disease_logreg_crossValidation_model.pkl')
+
+
+# print(cleanedData.columns)
