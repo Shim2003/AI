@@ -59,4 +59,12 @@ print("\nConfusion Matrix:\n", confusion_matrix(y_test, y_pred))
 joblib.dump(pipeline, 'heart_disease_logreg_crossValidation_model.pkl')
 
 
+
+# clean and remove the "0" outliers which is only 1 and it's irrelevant
+# print(cleanedData['ST slope'].value_counts())
+# print(cleanedData[['ST slope', 'target']].groupby('ST slope').mean())
+
+# print(cleanedData['sex'].value_counts())
+# print(cleanedData[['sex', 'target']].groupby('sex').mean())
+
 # print(cleanedData.columns)

@@ -21,7 +21,14 @@ resting_ecg = st.selectbox("Resting ECG", options=[0, 1, 2])
 max_hr = st.number_input("Max Heart Rate Achieved", min_value=50, max_value=250, value=150)
 exercise_angina = st.selectbox("Exercise Induced Angina", options=[0, 1], format_func=lambda x: "Yes" if x == 1 else "No")
 oldpeak = st.number_input("Oldpeak (ST depression)", min_value=0.0, max_value=10.0, value=1.0, step=0.1)
-st_slope = st.selectbox("ST Slope", options=[0, 1, 2])
+# Let user pick from meaningful labels
+st_slope_label = st.selectbox(
+    "ST Slope",
+    options=["Upsloping (1)", "Flat (2)", "Downsloping (3)"]
+)
+
+# Convert back to numeric value for the model
+st_slope = int(st_slope_label.split("(")[1][0])
 
 # Predict button
 if st.button("Predict"):
