@@ -8,93 +8,32 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
-from PIL import Image, ImageTk
-import io
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.pyplot as plt
 
 # Load dataset
-df = pd.read_csv('heart_statlog_cleveland_hungary_final.csv')
+df = pd.read_csv('cleaned_heart_disease_data.csv')
 
 # Global variables
 scaler = StandardScaler()
 final_knn = None
 X_train_scaled = X_test_scaled = y_train = y_test = None
 target_column = 'target'
-baseline_acc = None  # To store baseline accuracy
-scaler_r = None      # For reduced model
 
 # Tkinter GUI setup
 root = tk.Tk()
 root.title("Heart Disease Prediction (KNN)")
-root.geometry("1000x700")
+root.geometry("800x600")
 
-# Notebook widget
-notebook = ttk.Notebook(root)
-notebook.pack(expand=True, fill="both")
+# Main frame for modeling
+main_frame = tk.Frame(root)
+main_frame.pack(expand=True, fill="both", padx=20, pady=20)
 
-# Tabs
-tab1 = ttk.Frame(notebook)
-tab2 = ttk.Frame(notebook)
+# Title
+title_label = tk.Label(main_frame, text="Heart Disease KNN Model Training", font=("Arial", 16, "bold"))
+title_label.pack(pady=(0, 20))
 
-notebook.add(tab1, text="Dataset Viewer")
-notebook.add(tab2, text="Modeling")
-
-### Dataset Viewer Tab ###
-def clear_tab1():
-    for widget in tab1.winfo_children():
-        widget.destroy()
-
-def show_summary():
-    clear_tab1()
-    summary_text = tk.Text(tab1, wrap="none", height=20)
-    summary_text.pack(expand=True, fill="both")
-
-    summary_text.insert(tk.END, "=== Dataset Summary ===\n")
-    summary_text.insert(tk.END, f"Shape: {df.shape}\n\n")
-    summary_text.insert(tk.END, "Column Data Types:\n")
-    summary_text.insert(tk.END, df.dtypes.to_string())
-    summary_text.insert(tk.END, "\n\nStatistical Summary:\n")
-    summary_text.insert(tk.END, df.describe().to_string())
-
-    btn_frame = tk.Frame(tab1)
-    btn_frame.pack(pady=10)
-
-    tk.Button(btn_frame, text="Show Full Dataset", command=show_data).grid(row=0, column=0, padx=10)
-    tk.Button(btn_frame, text="Clean Data", command=clean_data).grid(row=0, column=1, padx=10)
-
-def show_data():
-    clear_tab1()
-    frame = tk.Frame(tab1)
-    frame.pack(expand=True, fill="both")
-
-    text_area = tk.Text(frame, wrap="none")
-    text_area.pack(side="left", expand=True, fill="both")
-
-    y_scroll = tk.Scrollbar(frame, orient="vertical", command=text_area.yview)
-    y_scroll.pack(side="right", fill="y")
-    text_area.configure(yscrollcommand=y_scroll.set)
-
-    x_scroll = tk.Scrollbar(tab1, orient="horizontal", command=text_area.xview)
-    x_scroll.pack(fill="x")
-    text_area.configure(xscrollcommand=x_scroll.set)
-
-    text_area.insert(tk.END, df.to_string())
-
-    tk.Button(tab1, text="Back to Summary", command=show_summary).pack(pady=10)
-
-def clean_data():
-    global df
-    before = df.shape[0]
-    df.drop_duplicates(inplace=True)
-    after = df.shape[0]
-    messagebox.showinfo("Data Cleaned",
-                        f"Removed {before - after} duplicate rows.\nNew shape: {df.shape}")
-    show_summary()
-
-show_summary()
-
-### Modeling Tab ###
-
+### Train/Test Split Function ###
 def open_split_dialog():
     def update_test_ratio(*args):
         try:
@@ -112,13 +51,8 @@ def open_split_dialog():
             test_part = 10 - train_part
             test_size = test_part / 10.0
 
-            num_duplicates = df.duplicated().sum()
-            num_missing = df.isnull().sum().sum()
-
-            df_cleaned = df.drop_duplicates().dropna()
-
-            X = df_cleaned.drop(target_column, axis=1)
-            y = df_cleaned[target_column]
+            X = df.drop(target_column, axis=1)
+            y = df[target_column]
 
             global X_train_scaled, X_test_scaled, y_train, y_test
 
@@ -129,18 +63,17 @@ def open_split_dialog():
             X_test_scaled = scaler.transform(X_test)
 
             result_text.set(
-                f"✅ Preprocess & Split Success!\n"
-                f"Duplicates Removed: {num_duplicates}\n"
-                f"Missing Values Removed: {num_missing}\n"
+                f"✅ Train/Test Split Success!\n"
                 f"Train Ratio: {train_part}/10\nTest Ratio: {test_part}/10\n"
                 f"Train Rows: {X_train.shape[0]}\nTest Rows: {X_test.shape[0]}"
             )
+            dialog.destroy()
         except Exception as e:
             result_text.set(f"❌ Error: {e}")
 
     dialog = tk.Toplevel()
-    dialog.title("Preprocess & Split")
-    dialog.geometry("320x260")
+    dialog.title("Train/Test Split")
+    dialog.geometry("320x200")
     dialog.resizable(False, False)
     dialog.grab_set()
 
@@ -168,17 +101,43 @@ def open_split_dialog():
     result_label = tk.Label(dialog, textvariable=result_text, fg='green', justify='left')
     result_label.pack(pady=10)
 
-# 1. Preprocess & Split
-tk.Label(tab2, text="1. Preprocess & Split", font=("Arial", 11, "bold")).pack(pady=(10, 0))
-tk.Button(tab2, text="Preprocess & Split", command=open_split_dialog).pack(pady=5)
+# Step 1: Train/Test Split
+tk.Label(main_frame, text="1. Train/Test Split", font=("Arial", 12, "bold")).pack(pady=(10, 0))
+tk.Button(main_frame, text="Configure Train/Test Split", command=open_split_dialog, width=25).pack(pady=5)
 
+### Find Best K Function ###
+def find_best_k():
+    if X_train_scaled is None:
+        messagebox.showwarning("Warning", "Please configure train/test split first.")
+        return
+    k_range = range(1, 31)
+    k_scores = []
+    for k in k_range:
+        model = KNeighborsClassifier(n_neighbors=k)
+        scores = cross_val_score(model, X_train_scaled, y_train, cv=5, scoring='accuracy')
+        k_scores.append(scores.mean())
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(k_range, k_scores, marker='o')
+    plt.xlabel("k")
+    plt.ylabel("CV Accuracy")
+    plt.title("Optimal k Value")
+    plt.grid(True)
+    plt.show()
+
+# Step 2: Find Best K
+tk.Label(main_frame, text="2. Find Best K", font=("Arial", 12, "bold")).pack(pady=(20, 0))
+tk.Button(main_frame, text="Find Best K", command=find_best_k, width=25).pack(pady=5)
+
+### Initial KNN Model ###
 def tune_and_train():
-    global final_knn, grid, baseline_acc
+    global final_knn, grid
 
     if X_train_scaled is None:
-        messagebox.showwarning("Warning", "Please preprocess data first.")
+        messagebox.showwarning("Warning", "Please configure train/test split first.")
         return
 
+    # Grid search to find best model
     param_grid = {
         'n_neighbors': range(3, 21),
         'weights': ['uniform', 'distance'],
@@ -189,92 +148,104 @@ def tune_and_train():
     grid.fit(X_train_scaled, y_train)
     final_knn = grid.best_estimator_
 
+    # Predictions and evaluation
     preds = final_knn.predict(X_test_scaled)
-    baseline_acc = accuracy_score(y_test, preds)  # Save baseline accuracy
-
+    acc = accuracy_score(y_test, preds)
     report = classification_report(y_test, preds, output_dict=True)
     report_df = pd.DataFrame(report).transpose()
 
+    # Create result window
     result_win = tk.Toplevel()
-    result_win.title("Baseline KNN Model Results")
+    result_win.title("Initial KNN Model Results")
+    result_win.geometry("600x500")
 
+    # Show results
     summary = (
-        f"✅ Baseline Model (GridSearchCV)\n"
+        f"✅ Best Parameters:\n"
         f"• n_neighbors: {grid.best_params_['n_neighbors']}\n"
         f"• weights: {grid.best_params_['weights']}\n"
         f"• metric: {grid.best_params_['metric']}\n\n"
-        f"✅ Accuracy: {baseline_acc:.4f}\n\n"
+        f"✅ Accuracy: {acc:.4f}\n\n"
         f"✅ Classification Report:\n"
         f"{report_df.round(2).to_string()}"
     )
     tk.Label(result_win, text=summary, justify="left", font=("Courier", 10), anchor="w").pack(padx=10, pady=10)
 
+    # Confusion Matrix
     cm = confusion_matrix(y_test, preds)
     fig, ax = plt.subplots(figsize=(5, 4))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax,
                 xticklabels=['No Disease', 'Disease'],
                 yticklabels=['No Disease', 'Disease'])
-    ax.set_title("Confusion Matrix (Baseline)")
+    ax.set_title("Confusion Matrix")
+    ax.set_ylabel("Actual")
+    ax.set_xlabel("Predicted")
     plt.tight_layout()
 
     canvas = FigureCanvasTkAgg(fig, master=result_win)
     canvas.draw()
     canvas.get_tk_widget().pack(padx=10, pady=10)
 
-# 2. Baseline KNN
-tk.Label(tab2, text="2. Baseline KNN (Best k)", font=("Arial", 11, "bold")).pack(pady=(10, 0))
-tk.Button(tab2, text="Find Best k & Train Baseline Model", command=tune_and_train).pack(pady=5)
+# Step 3: Initial KNN Model
+tk.Label(main_frame, text="3. Initial KNN Model", font=("Arial", 12, "bold")).pack(pady=(20, 0))
+tk.Button(main_frame, text="Train Initial KNN Model", command=tune_and_train, width=25).pack(pady=5)
 
+### Feature Correlation ###
 def show_correlation():
+    if target_column not in df.columns:
+        messagebox.showerror("Error", f"Target column '{target_column}' not found in dataset")
+        return
+        
     corr_with_target = df.drop(target_column, axis=1).corrwith(df[target_column]).abs().sort_values(ascending=False)
     top_corr = corr_with_target.head()
     corr_matrix = df.drop(target_column, axis=1).corr()
 
-    fig, ax = plt.subplots(figsize=(6, 5))
+    fig, ax = plt.subplots(figsize=(8, 6))
     sns.heatmap(corr_matrix, annot=True, fmt=".2f", cmap="coolwarm", ax=ax)
     ax.set_title("Feature Correlation Heatmap")
     fig.tight_layout()
 
-    buf = io.BytesIO()
-    fig.savefig(buf, format='png')
-    buf.seek(0)
-    img = Image.open(buf)
-    img_tk = ImageTk.PhotoImage(img)
-    buf.close()
-    plt.close(fig)
-
+    # Create result window
     dialog = tk.Toplevel()
     dialog.title("Feature Correlation")
     dialog.geometry("650x700")
     dialog.resizable(False, False)
     dialog.grab_set()
 
-    tk.Label(dialog, text="Top Correlated Features with Target", font=("Arial", 11, "bold")).pack(pady=(10, 0))
+    tk.Label(dialog, text="Top Correlated Features with Target", font=("Arial", 12, "bold")).pack(pady=(10, 0))
     text = tk.Text(dialog, height=6, width=70, font=("Consolas", 10))
     text.insert(tk.END, top_corr.to_string())
     text.config(state='disabled')
     text.pack(pady=5)
 
-    tk.Label(dialog, text="Feature Correlation Heatmap", font=("Arial", 11, "bold")).pack(pady=10)
-    img_label = tk.Label(dialog, image=img_tk)
-    img_label.image = img_tk
-    img_label.pack()
+    tk.Label(dialog, text="Feature Correlation Heatmap", font=("Arial", 12, "bold")).pack(pady=10)
+    
+    canvas = FigureCanvasTkAgg(fig, master=dialog)
+    canvas.draw()
+    canvas.get_tk_widget().pack()
 
     tk.Button(dialog, text="Close", command=dialog.destroy).pack(pady=10)
 
-# 3. EDA (Correlation)
-tk.Label(tab2, text="3. EDA (Correlation)", font=("Arial", 11, "bold")).pack(pady=(10, 0))
-tk.Button(tab2, text="Show Feature Correlation", command=show_correlation).pack(pady=5)
+# Step 4: Feature Correlation
+tk.Label(main_frame, text="4. Feature Correlation", font=("Arial", 12, "bold")).pack(pady=(20, 0))
+tk.Button(main_frame, text="Show Feature Correlation", command=show_correlation, width=25).pack(pady=5)
 
+### Final Model with Feature Reduction ###
 def final_model():
-    global final_knn, scaler_r, baseline_acc
+    global final_knn, scaler_r
 
+    if X_train_scaled is None:
+        messagebox.showwarning("Warning", "Please configure train/test split first.")
+        return
+
+    # Remove highly correlated features
     df_features_only = df.drop(columns=[target_column])
     corr_matrix = df_features_only.corr().abs()
     upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
-    to_drop = [col for col in upper.columns if any(upper[col] > 0.75)]
+    to_drop = [col for col in upper.columns if any(upper[col] > 0.9)]
     df_reduced = df.drop(columns=to_drop)
 
+    # Prepare data
     X = df_reduced.drop(columns=[target_column])
     y = df_reduced[target_column]
     X_train_r, X_test_r, y_train_r, y_test_r = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -282,6 +253,7 @@ def final_model():
     X_train_r_scaled = scaler_r.fit_transform(X_train_r)
     X_test_r_scaled = scaler_r.transform(X_test_r)
 
+    # Train model
     param_grid = {
         'n_neighbors': range(3, 21),
         'weights': ['uniform', 'distance'],
@@ -291,40 +263,49 @@ def final_model():
     grid.fit(X_train_r_scaled, y_train_r)
     final_knn = grid.best_estimator_
 
+    # Evaluate
     preds = final_knn.predict(X_test_r_scaled)
     acc = accuracy_score(y_test_r, preds)
     report_dict = classification_report(y_test_r, preds, output_dict=True)
     report_df = pd.DataFrame(report_dict).transpose().round(2)
 
-    improvement = acc - baseline_acc if baseline_acc else 0
-
+    # Create result window
     result_win = tk.Toplevel()
-    result_win.title("Final Enhanced Model Results")
+    result_win.title("Final KNN Model Results")
+    result_win.geometry("600x500")
 
+    # Summary
     summary = (
-        f"✅ Final Enhanced Model\n"
-        f"• Baseline Accuracy: {baseline_acc:.4f}\n"
-        f"• Final Accuracy: {acc:.4f}\n"
-        f"• Improvement: {improvement:.4f}\n"
+        f"✅ Final Reduced Model\n"
+        f"• Accuracy: {acc:.4f}\n"
         f"• Dropped Features: {', '.join(to_drop) if to_drop else 'None'}\n\n"
         f"✅ Classification Report:\n{report_df.to_string()}"
     )
     tk.Label(result_win, text=summary, justify="left", font=("Courier", 10), anchor="w").pack(padx=10, pady=10)
 
+    # Confusion Matrix
     cm = confusion_matrix(y_test_r, preds)
     fig, ax = plt.subplots(figsize=(5, 4))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax,
                 xticklabels=['No Disease', 'Disease'],
                 yticklabels=['No Disease', 'Disease'])
-    ax.set_title("Confusion Matrix (Enhanced)")
+    ax.set_title("Confusion Matrix")
+    ax.set_ylabel("Actual")
+    ax.set_xlabel("Predicted")
     plt.tight_layout()
 
     canvas = FigureCanvasTkAgg(fig, master=result_win)
     canvas.draw()
     canvas.get_tk_widget().pack(padx=10, pady=10)
 
-# 4. Enhanced Model
-tk.Label(tab2, text="4. Enhanced Model (Final Evaluation)", font=("Arial", 11, "bold")).pack(pady=(10, 0))
-tk.Button(tab2, text="Run Final Enhanced Model", command=final_model).pack(pady=5)
+# Step 5: Final Model
+tk.Label(main_frame, text="5. Final Model with Feature Reduction", font=("Arial", 12, "bold")).pack(pady=(20, 0))
+tk.Button(main_frame, text="Train Final Model", command=final_model, width=25).pack(pady=5)
+
+# Dataset info at bottom
+info_frame = tk.Frame(main_frame)
+info_frame.pack(side="bottom", fill="x", pady=10)
+tk.Label(info_frame, text=f"Dataset: {df.shape[0]} rows × {df.shape[1]} columns", 
+         font=("Arial", 10), fg="gray").pack()
 
 root.mainloop()
