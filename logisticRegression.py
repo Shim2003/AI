@@ -11,7 +11,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 
 # 1. Load and clean data
-data = pd.read_csv('heart_statlog_cleveland_hungary_final.csv')
+data = pd.read_csv('cleaned_heart_disease_data.csv')
 cleanedData = data.drop_duplicates().dropna()
 
 # 2. Separate features and target
@@ -35,7 +35,7 @@ pipeline = Pipeline([
 
 # 6. Split data
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.1, stratify=y, random_state=42
+    X, y, test_size=0.2, stratify=y, random_state=42
 )
 
 # 7. Train model
