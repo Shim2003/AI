@@ -2,6 +2,27 @@ import streamlit as st
 import joblib
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pickle
+
+def load_rf_model():
+    model_path = 'heart_disease_rf_model.pkl'
+    scaler_path = 'heart_disease_rf_scaler.pkl'
+    rf_model = joblib.load(model_path)
+    scaler = joblib.load(scaler_path)
+    return rf_model, scaler
+
+# Choose model
+st.sidebar.title("⚙️ Settings")
+model_choice = st.sidebar.radio("Select Model", ["Logistic Regression", "SVM", "Random Forest"])
+
+# Load SVM model & scaler
+@st.cache_resource
+def load_svm_model():
+    model = joblib.load("heart_disease_svm_model.pkl")
+    scaler = joblib.load("heart_disease_scaler.pkl")
+    return model, scaler
 
 # Load the trained model
 @st.cache_resource
@@ -191,8 +212,33 @@ if page == "Heart Disease Prediction":
         ]], columns=columns)
         
         # Make prediction
-        prediction = model.predict(input_df)[0]
-        probability = model.predict_proba(input_df)[0][1]
+        if model_choice == "Logistic Regression":
+            prediction = model.predict(input_df)[0]
+            probability = model.predict_proba(input_df)[0][1]
+
+        elif model_choice == "SVM":
+            svm_model, scaler = load_svm_model()
+            input_scaled = scaler.transform(input_df)
+            prediction = svm_model.predict(input_scaled)[0]
+            probability = svm_model.predict_proba(input_scaled)[0][1]
+
+        elif model_choice == "Random Forest":
+            rf_model, scaler = load_rf_model()
+            input_scaled = scaler.transform(input_df)
+            prediction = rf_model.predict(input_scaled)[0]
+            probability = rf_model.predict_proba(input_scaled)[0][1]
+
+            # --- Feature Importance 可视化 ---
+            st.subheader("🔎 Feature Importance (Random Forest)")
+            feature_importances = pd.Series(rf_model.feature_importances_, index=input_df.columns)
+            feature_importances = feature_importances.sort_values(ascending=False)
+
+            plt.figure(figsize=(8, 5))
+            sns.barplot(x=feature_importances, y=feature_importances.index, palette="viridis")
+            plt.title("Random Forest Feature Importance")
+            plt.xlabel("Importance Score")
+            plt.ylabel("Features")
+            st.pyplot(plt)
         
         # Store prediction results
         st.session_state.prediction_result = {
