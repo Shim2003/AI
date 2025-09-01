@@ -11,7 +11,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 
 # 1. Load and clean data
-data = pd.read_csv('heart_statlog_cleveland_hungary_final.csv')
+data = pd.read_csv('cleaned_heart_disease_data.csv')
 cleanedData = data.drop_duplicates().dropna()
 
 # 2. Separate features and target
@@ -58,13 +58,30 @@ print("\nConfusion Matrix:\n", confusion_matrix(y_test, y_pred))
 # 10. Save the model
 joblib.dump(pipeline, 'heart_disease_logreg_crossValidation_model.pkl')
 
-
-
 # clean and remove the "0" outliers which is only 1 and it's irrelevant
 # print(cleanedData['ST slope'].value_counts())
 # print(cleanedData[['ST slope', 'target']].groupby('ST slope').mean())
 
 # print(cleanedData['sex'].value_counts())
 # print(cleanedData[['sex', 'target']].groupby('sex').mean())
+
+# print(cleanedData['chest pain type'].value_counts())
+# print(cleanedData[['chest pain type', 'target']].groupby('chest pain type').mean()) 
+# typical angina 一般心绞痛， atypical angina 非一般心绞痛， non-anginal pain 非心绞痛疼痛， asymptomatic pain 无症状疼痛
+# chest pain type          
+# 1                0.434783
+# 2                0.138728
+# 3                0.351485
+# 4                0.790323
+
+# print(cleanedData['oldpeak'].describe())
+# print(cleanedData.groupby('target')['oldpeak'].mean())  # 0: 0.421359, 1: 1.314651
+# print(cleanedData.groupby('target')['oldpeak'].median()) #0: 0.0, 1: 1.2
+
+# sns.boxplot(x='target', y='oldpeak', data=cleanedData)
+# plt.xlabel("Heart Disease (1 = Yes, 0 = No)")
+# plt.ylabel("Oldpeak")
+# plt.title("Oldpeak Distribution by Heart Disease")
+# plt.show()     #超过1会比较有风险，一点点
 
 # print(cleanedData.columns)

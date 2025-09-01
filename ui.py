@@ -138,7 +138,7 @@ def get_lifestyle_recommendations(user_data, prediction_prob):
 
 # PAGE 1: Heart Disease Prediction
 if page == "Heart Disease Prediction":
-    st.title("💓 Heart Disease Prediction App")
+    st.title("💓 Heart Disease Prediction")
     st.write("Fill in the patient details to predict the likelihood of heart disease.")
 
     # User inputs for all features
@@ -155,7 +155,9 @@ if page == "Heart Disease Prediction":
     max_hr = st.number_input("Max Heart Rate Achieved", min_value=50, max_value=250, value=150)
     exercise_angina = st.selectbox("Exercise Induced Angina", options=[0, 1], 
                                   format_func=lambda x: "Yes" if x == 1 else "No")
-    oldpeak = st.number_input("Oldpeak (ST depression)", min_value=0.0, max_value=10.0, value=1.0, step=0.1)
+    oldpeak = st.number_input(
+    "Oldpeak (ST depression)", min_value=0.0, max_value=10.0, value=1.0, step=0.1,
+    help="How much the heart's ECG line drops below normal. Higher values may mean more heart stress.")
     st_slope = st.selectbox("ST Slope", options=[1, 2, 3],
                            help="1: Upsloping, 2: Flat, 3: Downsloping")
 
