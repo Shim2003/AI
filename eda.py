@@ -2,23 +2,17 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-df = pd.read_csv('heart_statlog_cleveland_hungary_final.csv')  # Replace with your actual file path
-df.head()
-df.info()
-df.describe()
+df = pd.read_csv('cleaned_heart_disease_data.csv')  # Replace with your actual file path
 
-# df['target'].value_counts()
-# sns.countplot(x='target', data=df)
-# plt.title('Target Class Distribution')
-# plt.show()
+# Numerical features distribution
+num_features = df.select_dtypes(include=['float64','int64']).columns.drop('target')
 
-# df.hist(bins=15, figsize=(15, 10))
-# plt.tight_layout()
-# plt.show()
+df[num_features].hist(bins=20, figsize=(15, 10))
+plt.suptitle("Numerical Feature Distributions")
+plt.show()
 
-categorical_cols = ['sex', 'cp', 'fbs', 'restecg', 'exang', 'slope', 'ca', 'thal']
-for col in categorical_cols:
-    sns.countplot(x=col, data=df)
-    plt.title(f'Distribution of {col}')
-    plt.show()
-
+# Correlation heatmap
+plt.figure(figsize=(10,8))
+sns.heatmap(df.corr(), annot=True, cmap="coolwarm", fmt=".2f")
+plt.title("Feature Correlation Heatmap")
+plt.show()

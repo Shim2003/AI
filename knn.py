@@ -2,38 +2,122 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV, StratifiedKFold
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.preprocessing import StandardScaler, OneHotEncoder, PowerTransformer
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_auc_score, roc_curve
+from sklearn.decomposition import PCA
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.feature_selection import SelectKBest, mutual_info_classif
 import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import matplotlib.pyplot as plt
+import warnings
+import joblib
+warnings.filterwarnings('ignore')
 
+# -------------------------
 # Load dataset
-df = pd.read_csv('cleaned_heart_disease_data.csv')
+# -------------------------
+try:
+    df = pd.read_csv('cleaned_heart_disease_data.csv')
+    print(f"Dataset loaded successfully: {df.shape}")
+except FileNotFoundError:
+    print("Error: 'cleaned_heart_disease_data.csv' not found. Please ensure the file is in the same directory.")
+    exit()
 
-# Global variables
-scaler = StandardScaler()
-final_knn = None
-X_train_scaled = X_test_scaled = y_train = y_test = None
+# -------------------------
+# Global / schema
+# -------------------------
 target_column = 'target'
 
-# Tkinter GUI setup
-root = tk.Tk()
-root.title("Heart Disease Prediction (KNN)")
-root.geometry("800x600")
+# Based on your EDA:
+categorical_cols = [
+    'sex', 'chest pain type', 'fasting blood sugar',
+    'resting ecg', 'exercise angina', 'ST slope'
+]
 
-# Main frame for modeling
+numeric_cols = [
+    'age', 'resting bp s', 'cholesterol',
+    'max heart rate', 'oldpeak'
+]
+
+# Which numeric columns were skewed in your plots
+skewed_numeric_cols = ['cholesterol', 'oldpeak']
+other_numeric_cols = [c for c in numeric_cols if c not in skewed_numeric_cols]
+
+# Globals for train/test raw splits (pipeline will transform)
+X_train_raw = X_test_raw = y_train = y_test = None
+final_knn = None
+grid = None
+
+# -------------------------
+# Tkinter GUI setup
+# -------------------------
+root = tk.Tk()
+root.title("Heart Disease Prediction (Enhanced KNN)")
+root.geometry("900x700")
+
 main_frame = tk.Frame(root)
 main_frame.pack(expand=True, fill="both", padx=20, pady=20)
 
-# Title
-title_label = tk.Label(main_frame, text="Heart Disease KNN Model Training", font=("Arial", 16, "bold"))
+title_label = tk.Label(main_frame, text="Heart Disease: Enhanced KNN Model Trainer", font=("Arial", 16, "bold"))
 title_label.pack(pady=(0, 20))
 
-### Train/Test Split Function ###
+# -------------------------
+# Helper: Build pipeline
+# -------------------------
+def build_knn_pipeline():
+    """
+    Preprocessing:
+      - PowerTransform skewed numeric columns (yeo-johnson)
+      - passthrough other numeric columns
+      - StandardScale all numeric outputs
+      - OneHotEncode categorical columns (drop='if_binary' to avoid trivial collinearity)
+    Followed by:
+      - SelectKBest (mutual_info_classif)
+      - KNeighborsClassifier
+    """
+    # Apply PowerTransformer only to skewed columns and passthrough others
+    numeric_power_ct = ColumnTransformer(
+        transformers=[
+            ('skewed', PowerTransformer(method='yeo-johnson', standardize=False), skewed_numeric_cols),
+            ('other', 'passthrough', other_numeric_cols)
+        ],
+        remainder='drop'
+    )
+
+    # Numeric block: apply power transform then scale
+    numeric_block = Pipeline(steps=[
+        ('num_power', numeric_power_ct),
+        ('num_scale', StandardScaler())
+    ])
+
+    # Categorical block
+    categorical_block = OneHotEncoder(handle_unknown='ignore', drop='if_binary', sparse_output=False)
+
+    # Full preprocessor
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ('num', numeric_block, numeric_cols),
+            ('cat', categorical_block, categorical_cols)
+        ],
+        remainder='drop'
+    )
+
+    # Full pipeline
+    pipeline = Pipeline(steps=[
+        ('preproc', preprocessor),
+        ('select', SelectKBest(score_func=mutual_info_classif, k=5)),  # Default k=5
+        ('knn', KNeighborsClassifier())
+    ])
+
+    return pipeline
+
+# -------------------------
+# Train/Test Split dialog
+# -------------------------
 def open_split_dialog():
     def update_test_ratio(*args):
         try:
@@ -54,18 +138,16 @@ def open_split_dialog():
             X = df.drop(target_column, axis=1)
             y = df[target_column]
 
-            global X_train_scaled, X_test_scaled, y_train, y_test
+            global X_train_raw, X_test_raw, y_train, y_test
 
-            X_train, X_test, y_train, y_test = train_test_split(
+            X_train_raw, X_test_raw, y_train, y_test = train_test_split(
                 X, y, test_size=test_size, stratify=y, random_state=42
             )
-            X_train_scaled = scaler.fit_transform(X_train)
-            X_test_scaled = scaler.transform(X_test)
 
             result_text.set(
                 f"✅ Train/Test Split Success!\n"
                 f"Train Ratio: {train_part}/10\nTest Ratio: {test_part}/10\n"
-                f"Train Rows: {X_train.shape[0]}\nTest Rows: {X_test.shape[0]}"
+                f"Train Rows: {X_train_raw.shape[0]}\nTest Rows: {X_test_raw.shape[0]}"
             )
             dialog.destroy()
         except Exception as e:
@@ -73,7 +155,7 @@ def open_split_dialog():
 
     dialog = tk.Toplevel()
     dialog.title("Train/Test Split")
-    dialog.geometry("320x200")
+    dialog.geometry("360x220")
     dialog.resizable(False, False)
     dialog.grab_set()
 
@@ -93,219 +175,198 @@ def open_split_dialog():
     update_test_ratio()
 
     btn_frame = tk.Frame(dialog)
-    btn_frame.pack(pady=5)
-    tk.Button(btn_frame, text="OK", command=perform_split, width=8).grid(row=0, column=0, padx=10)
-    tk.Button(btn_frame, text="Cancel", command=dialog.destroy, width=8).grid(row=0, column=1, padx=10)
+    btn_frame.pack(pady=10)
+    tk.Button(btn_frame, text="OK", command=perform_split, width=10).grid(row=0, column=0, padx=10)
+    tk.Button(btn_frame, text="Cancel", command=dialog.destroy, width=10).grid(row=0, column=1, padx=10)
 
     result_text = tk.StringVar()
     result_label = tk.Label(dialog, textvariable=result_text, fg='green', justify='left')
-    result_label.pack(pady=10)
+    result_label.pack(pady=5)
 
-# Step 1: Train/Test Split
+# UI: Step 1
 tk.Label(main_frame, text="1. Train/Test Split", font=("Arial", 12, "bold")).pack(pady=(10, 0))
-tk.Button(main_frame, text="Configure Train/Test Split", command=open_split_dialog, width=25).pack(pady=5)
+tk.Button(main_frame, text="Configure Train/Test Split", command=open_split_dialog, width=30).pack(pady=5)
 
-### Find Best K Function ###
+# -------------------------
+# Find Best K (uses pipeline & CV ROC-AUC)
+# -------------------------
 def find_best_k():
-    if X_train_scaled is None:
+    if X_train_raw is None:
         messagebox.showwarning("Warning", "Please configure train/test split first.")
         return
+
     k_range = range(1, 31)
-    k_scores = []
+    auc_scores = []
+
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
     for k in k_range:
-        model = KNeighborsClassifier(n_neighbors=k)
-        scores = cross_val_score(model, X_train_scaled, y_train, cv=5, scoring='accuracy')
-        k_scores.append(scores.mean())
-    
+        pipe = build_knn_pipeline()
+        # set reasonable KNN defaults for this search
+        pipe.set_params(
+            select__k=5,  # Fixed: use integer instead of 'all'
+            knn__n_neighbors=k,
+            knn__weights='distance',
+            knn__metric='minkowski',
+            knn__p=2
+        )
+        try:
+            scores = cross_val_score(pipe, X_train_raw, y_train, cv=cv, scoring='roc_auc', n_jobs=-1)
+            auc_scores.append(scores.mean())
+        except Exception as e:
+            print(f"Error with k={k}: {e}")
+            auc_scores.append(np.nan)
+
     plt.figure(figsize=(10, 6))
-    plt.plot(k_range, k_scores, marker='o')
+    plt.plot(list(k_range), auc_scores, marker='o')
     plt.xlabel("k")
-    plt.ylabel("CV Accuracy")
-    plt.title("Optimal k Value")
+    plt.ylabel("CV ROC-AUC")
+    plt.title("K vs Cross-Validated ROC-AUC (with preprocessing)")
     plt.grid(True)
     plt.show()
 
-# Step 2: Find Best K
-tk.Label(main_frame, text="2. Find Best K", font=("Arial", 12, "bold")).pack(pady=(20, 0))
-tk.Button(main_frame, text="Find Best K", command=find_best_k, width=25).pack(pady=5)
+# UI: Step 2
+tk.Label(main_frame, text="2. Find Best K (CV ROC-AUC)", font=("Arial", 12, "bold")).pack(pady=(20, 0))
+tk.Button(main_frame, text="Find Best K", command=find_best_k, width=30).pack(pady=5)
 
-### Initial KNN Model ###
+# -------------------------
+# Enhanced KNN training & grid search (FIXED)
+# -------------------------
 def tune_and_train():
     global final_knn, grid
 
-    if X_train_scaled is None:
+    if X_train_raw is None:
         messagebox.showwarning("Warning", "Please configure train/test split first.")
         return
 
-    # Grid search to find best model
-    param_grid = {
-        'n_neighbors': range(3, 21),
-        'weights': ['uniform', 'distance'],
-        'metric': ['euclidean', 'manhattan', 'minkowski']
-    }
-    grid = GridSearchCV(KNeighborsClassifier(), param_grid, cv=5,
-                        scoring='accuracy', n_jobs=-1)
-    grid.fit(X_train_scaled, y_train)
-    final_knn = grid.best_estimator_
+    try:
+        # Show progress
+        progress_win = tk.Toplevel()
+        progress_win.title("Training in Progress...")
+        progress_win.geometry("300x100")
+        progress_win.grab_set()
+        tk.Label(progress_win, text="Training Enhanced KNN Model...\nThis may take a few minutes.", 
+                font=("Arial", 10)).pack(expand=True)
+        progress_win.update()
 
-    # Predictions and evaluation
-    preds = final_knn.predict(X_test_scaled)
-    acc = accuracy_score(y_test, preds)
-    report = classification_report(y_test, preds, output_dict=True)
-    report_df = pd.DataFrame(report).transpose()
+        pipe = build_knn_pipeline()
 
-    # Create result window
-    result_win = tk.Toplevel()
-    result_win.title("Initial KNN Model Results")
-    result_win.geometry("600x500")
-
-    # Show results
-    summary = (
-        f"✅ Best Parameters:\n"
-        f"• n_neighbors: {grid.best_params_['n_neighbors']}\n"
-        f"• weights: {grid.best_params_['weights']}\n"
-        f"• metric: {grid.best_params_['metric']}\n\n"
-        f"✅ Accuracy: {acc:.4f}\n\n"
-        f"✅ Classification Report:\n"
-        f"{report_df.round(2).to_string()}"
-    )
-    tk.Label(result_win, text=summary, justify="left", font=("Courier", 10), anchor="w").pack(padx=10, pady=10)
-
-    # Confusion Matrix
-    cm = confusion_matrix(y_test, preds)
-    fig, ax = plt.subplots(figsize=(5, 4))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax,
-                xticklabels=['No Disease', 'Disease'],
-                yticklabels=['No Disease', 'Disease'])
-    ax.set_title("Confusion Matrix")
-    ax.set_ylabel("Actual")
-    ax.set_xlabel("Predicted")
-    plt.tight_layout()
-
-    canvas = FigureCanvasTkAgg(fig, master=result_win)
-    canvas.draw()
-    canvas.get_tk_widget().pack(padx=10, pady=10)
-
-# Step 3: Initial KNN Model
-tk.Label(main_frame, text="3. Initial KNN Model", font=("Arial", 12, "bold")).pack(pady=(20, 0))
-tk.Button(main_frame, text="Train Initial KNN Model", command=tune_and_train, width=25).pack(pady=5)
-
-### Feature Correlation ###
-def show_correlation():
-    if target_column not in df.columns:
-        messagebox.showerror("Error", f"Target column '{target_column}' not found in dataset")
-        return
+        # Get total number of features after preprocessing to set reasonable k values
+        pipe_temp = build_knn_pipeline()
+        pipe_temp.fit(X_train_raw, y_train)
+        n_features_after_preprocessing = pipe_temp.named_steps['preproc'].transform(X_train_raw).shape[1]
         
-    corr_with_target = df.drop(target_column, axis=1).corrwith(df[target_column]).abs().sort_values(ascending=False)
-    top_corr = corr_with_target.head()
-    corr_matrix = df.drop(target_column, axis=1).corr()
+        # Set reasonable k values for feature selection (max should not exceed total features)
+        max_k = min(n_features_after_preprocessing, 10)
+        k_values = list(range(3, max_k + 1)) + [n_features_after_preprocessing]  # Include 'all features'
 
-    fig, ax = plt.subplots(figsize=(8, 6))
-    sns.heatmap(corr_matrix, annot=True, fmt=".2f", cmap="coolwarm", ax=ax)
-    ax.set_title("Feature Correlation Heatmap")
-    fig.tight_layout()
+        # Simplified grid for faster execution
+        param_grid = {
+            'select__k': k_values,
+            'knn__n_neighbors': list(range(3, 16, 2)),  # Reduced range for faster execution
+            'knn__weights': ['uniform', 'distance'],
+            'knn__metric': ['minkowski'],
+            'knn__p': [1, 2]
+        }
 
-    # Create result window
-    dialog = tk.Toplevel()
-    dialog.title("Feature Correlation")
-    dialog.geometry("650x700")
-    dialog.resizable(False, False)
-    dialog.grab_set()
+        print("Starting grid search...")
+        cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+        grid = GridSearchCV(pipe, param_grid, cv=cv, scoring='roc_auc', n_jobs=-1, verbose=1)
+        grid.fit(X_train_raw, y_train)
 
-    tk.Label(dialog, text="Top Correlated Features with Target", font=("Arial", 12, "bold")).pack(pady=(10, 0))
-    text = tk.Text(dialog, height=6, width=70, font=("Consolas", 10))
-    text.insert(tk.END, top_corr.to_string())
-    text.config(state='disabled')
-    text.pack(pady=5)
+        final_knn = grid.best_estimator_
+        print("Grid search completed!")
+        joblib.dump(final_knn, "final_knn_model.pkl")
+        print("Model saved as final_knn_model.pkl")
 
-    tk.Label(dialog, text="Feature Correlation Heatmap", font=("Arial", 12, "bold")).pack(pady=10)
-    
-    canvas = FigureCanvasTkAgg(fig, master=dialog)
-    canvas.draw()
-    canvas.get_tk_widget().pack()
+        # Close progress window
+        progress_win.destroy()
 
-    tk.Button(dialog, text="Close", command=dialog.destroy).pack(pady=10)
+        # Evaluate on test
+        proba = final_knn.predict_proba(X_test_raw)[:, 1]
+        preds = (proba >= 0.5).astype(int)
 
-# Step 4: Feature Correlation
-tk.Label(main_frame, text="4. Feature Correlation", font=("Arial", 12, "bold")).pack(pady=(20, 0))
-tk.Button(main_frame, text="Show Feature Correlation", command=show_correlation, width=25).pack(pady=5)
+        acc = accuracy_score(y_test, preds)
+        auc = roc_auc_score(y_test, proba)
+        report = classification_report(y_test, preds, output_dict=True)
+        report_df = pd.DataFrame(report).transpose()
 
-### Final Model with Feature Reduction ###
-def final_model():
-    global final_knn, scaler_r
+        # Result window
+        result_win = tk.Toplevel()
+        result_win.title("Enhanced KNN Model Results")
+        result_win.geometry("900x800")
 
-    if X_train_scaled is None:
-        messagebox.showwarning("Warning", "Please configure train/test split first.")
-        return
+        # Create scrollable frame for results
+        canvas_scroll = tk.Canvas(result_win)
+        scrollbar = tk.Scrollbar(result_win, orient="vertical", command=canvas_scroll.yview)
+        scrollable_frame = tk.Frame(canvas_scroll)
 
-    # Remove highly correlated features
-    df_features_only = df.drop(columns=[target_column])
-    corr_matrix = df_features_only.corr().abs()
-    upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
-    to_drop = [col for col in upper.columns if any(upper[col] > 0.9)]
-    df_reduced = df.drop(columns=to_drop)
+        canvas_scroll.configure(yscrollcommand=scrollbar.set)
+        canvas_scroll.create_window((0, 0), window=scrollable_frame, anchor="nw")
 
-    # Prepare data
-    X = df_reduced.drop(columns=[target_column])
-    y = df_reduced[target_column]
-    X_train_r, X_test_r, y_train_r, y_test_r = train_test_split(X, y, test_size=0.2, random_state=42)
-    scaler_r = StandardScaler()
-    X_train_r_scaled = scaler_r.fit_transform(X_train_r)
-    X_test_r_scaled = scaler_r.transform(X_test_r)
+        # Results summary
+        summary = (
+            f"✅ Best Parameters:\n{grid.best_params_}\n\n"
+            f"✅ Best CV ROC-AUC: {grid.best_score_:.4f}\n"
+            f"✅ Test Accuracy: {acc:.4f}\n"
+            f"✅ Test ROC-AUC:  {auc:.4f}\n\n"
+            f"✅ Classification Report:\n{report_df.round(3).to_string()}"
+        )
+        tk.Label(scrollable_frame, text=summary, justify="left", font=("Courier", 9), anchor="w").pack(padx=10, pady=10)
 
-    # Train model
-    param_grid = {
-        'n_neighbors': range(3, 21),
-        'weights': ['uniform', 'distance'],
-        'metric': ['euclidean', 'manhattan', 'minkowski']
-    }
-    grid = GridSearchCV(KNeighborsClassifier(), param_grid, cv=5, scoring='accuracy', n_jobs=-1)
-    grid.fit(X_train_r_scaled, y_train_r)
-    final_knn = grid.best_estimator_
+        # Confusion matrix
+        cm = confusion_matrix(y_test, preds)
+        fig_cm, ax_cm = plt.subplots(figsize=(5, 4))
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax_cm,
+                    xticklabels=['No Disease', 'Disease'],
+                    yticklabels=['No Disease', 'Disease'])
+        ax_cm.set_title("Confusion Matrix")
+        ax_cm.set_ylabel("Actual")
+        ax_cm.set_xlabel("Predicted")
+        plt.tight_layout()
+        canvas_cm = FigureCanvasTkAgg(fig_cm, master=scrollable_frame)
+        canvas_cm.draw()
+        canvas_cm.get_tk_widget().pack(padx=10, pady=10)
 
-    # Evaluate
-    preds = final_knn.predict(X_test_r_scaled)
-    acc = accuracy_score(y_test_r, preds)
-    report_dict = classification_report(y_test_r, preds, output_dict=True)
-    report_df = pd.DataFrame(report_dict).transpose().round(2)
+        # ROC curve
+        fpr, tpr, _ = roc_curve(y_test, proba)
+        fig_roc, ax_roc = plt.subplots(figsize=(5, 4))
+        ax_roc.plot(fpr, tpr, label=f"AUC={auc:.3f}")
+        ax_roc.plot([0,1],[0,1],'--', linewidth=0.8, color='red', alpha=0.7)
+        ax_roc.set_title("ROC Curve")
+        ax_roc.set_xlabel("False Positive Rate")
+        ax_roc.set_ylabel("True Positive Rate")
+        ax_roc.legend(loc="lower right")
+        ax_roc.grid(True, alpha=0.3)
+        plt.tight_layout()
+        canvas_roc = FigureCanvasTkAgg(fig_roc, master=scrollable_frame)
+        canvas_roc.draw()
+        canvas_roc.get_tk_widget().pack(padx=10, pady=10)
 
-    # Create result window
-    result_win = tk.Toplevel()
-    result_win.title("Final KNN Model Results")
-    result_win.geometry("600x500")
+        # Configure scrollable region
+        scrollable_frame.update_idletasks()
+        canvas_scroll.configure(scrollregion=canvas_scroll.bbox("all"))
 
-    # Summary
-    summary = (
-        f"✅ Final Reduced Model\n"
-        f"• Accuracy: {acc:.4f}\n"
-        f"• Dropped Features: {', '.join(to_drop) if to_drop else 'None'}\n\n"
-        f"✅ Classification Report:\n{report_df.to_string()}"
-    )
-    tk.Label(result_win, text=summary, justify="left", font=("Courier", 10), anchor="w").pack(padx=10, pady=10)
+        canvas_scroll.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
 
-    # Confusion Matrix
-    cm = confusion_matrix(y_test_r, preds)
-    fig, ax = plt.subplots(figsize=(5, 4))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax,
-                xticklabels=['No Disease', 'Disease'],
-                yticklabels=['No Disease', 'Disease'])
-    ax.set_title("Confusion Matrix")
-    ax.set_ylabel("Actual")
-    ax.set_xlabel("Predicted")
-    plt.tight_layout()
+    except Exception as e:
+        if 'progress_win' in locals():
+            progress_win.destroy()
+        messagebox.showerror("Error", f"Training failed: {str(e)}\n\nTry reducing the parameter grid size or check your data.")
+        print(f"Detailed error: {e}")
 
-    canvas = FigureCanvasTkAgg(fig, master=result_win)
-    canvas.draw()
-    canvas.get_tk_widget().pack(padx=10, pady=10)
+# UI: Step 3
+tk.Label(main_frame, text="3. Train Enhanced KNN Model", font=("Arial", 12, "bold")).pack(pady=(20, 0))
+tk.Button(main_frame, text="Train Enhanced KNN", command=tune_and_train, width=30).pack(pady=5)
 
-# Step 5: Final Model
-tk.Label(main_frame, text="5. Final Model with Feature Reduction", font=("Arial", 12, "bold")).pack(pady=(20, 0))
-tk.Button(main_frame, text="Train Final Model", command=final_model, width=25).pack(pady=5)
-
+# -------------------------
 # Dataset info at bottom
+# -------------------------
 info_frame = tk.Frame(main_frame)
 info_frame.pack(side="bottom", fill="x", pady=10)
 tk.Label(info_frame, text=f"Dataset: {df.shape[0]} rows × {df.shape[1]} columns", 
          font=("Arial", 10), fg="gray").pack()
 
-root.mainloop()
+if __name__ == "__main__":
+    root.mainloop()
