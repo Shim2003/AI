@@ -6,12 +6,12 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 # 读入数据
-df = pd.read_csv("heart_statlog_cleveland_hungary_final.csv")
+df = pd.read_csv('cleaned_heart_disease_data.csv')
 X = df.drop(columns=["target"])
 y = df["target"]
 
 # 分割训练集和测试集
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
 # 特征标准化
 scaler = StandardScaler()
@@ -31,7 +31,7 @@ roc_auc = auc(fpr, tpr)
 
 # 画图
 plt.figure()
-plt.plot(fpr, tpr, label=f'ROC curve (AUC = {roc_auc:.2f})', color='orange')
+plt.plot(fpr, tpr, label=f'ROC curve (AUC = {roc_auc:.3f})', color='orange')
 plt.plot([0, 1], [0, 1], 'k--')  # 参考线
 plt.xlabel('False Positive Rate')
 plt.ylabel('True Positive Rate')

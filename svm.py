@@ -9,10 +9,8 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-# Safely read CSV file
-csv_path = os.path.join(os.path.dirname(__file__), 'heart_statlog_cleveland_hungary_final.csv')
-df = pd.read_csv(csv_path)
-df = df.drop_duplicates().dropna()
+# read CSV file
+df = pd.read_csv('cleaned_heart_disease_data.csv')
 
 # Separate features and labels
 X = df.drop('target', axis=1)
@@ -29,7 +27,7 @@ X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
 # Train SVM model with RBF kernel and probability output
-svm_model = SVC(kernel='rbf', probability=True)
+svm_model = SVC(kernel='rbf', probability=True, random_state=42)
 svm_model.fit(X_train_scaled, y_train)
 
 # Make predictions and evaluate
