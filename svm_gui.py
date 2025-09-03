@@ -155,6 +155,24 @@ def random_training():
             f"Average Accuracy: {avg_acc:.4f}\n"
             f"Std Dev: {std_acc:.4f}"
         )
+
+        # -----------------------
+        # Show line chart of accuracies
+        # -----------------------
+        fig, ax = plt.subplots(figsize=(6, 4))
+        ax.plot(range(1, n_runs+1), acc_list, marker='o', linestyle='-', color='orange')
+        ax.set_xlabel("Run Number")
+        ax.set_ylabel("Accuracy")
+        ax.set_title(f"Accuracy per Run ({n_runs} runs)")
+        ax.grid(True)
+
+        # Show in a new Tkinter window
+        chart_win = tk.Toplevel(root)
+        chart_win.title("Accuracy per Run")
+        canvas = FigureCanvasTkAgg(fig, master=chart_win)
+        canvas.draw()
+        canvas.get_tk_widget().pack()
+        
     except Exception as e:
         messagebox.showerror("Error", str(e))
 
