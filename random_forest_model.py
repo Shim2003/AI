@@ -10,8 +10,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 # Safely read CSV
-csv_path = os.path.join(os.path.dirname(__file__), 'heart_statlog_cleveland_hungary_final.csv')
-df = pd.read_csv(csv_path).drop_duplicates()
+df = pd.read_csv('cleaned_heart_disease_data.csv')
 
 # Features and target
 X = df.drop('target', axis=1)

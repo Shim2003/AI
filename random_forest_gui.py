@@ -248,6 +248,39 @@ tk.Label(main_frame, text="5. Save Model", font=("Arial", 12, "bold")).pack(pady
 tk.Button(main_frame, text="Save Trained Model", command=save_model).pack(pady=5)
 
 # -----------------------
+# Step 6: Feature Importance
+# -----------------------
+def show_feature_importance():
+    if rf_model is None:
+        messagebox.showwarning("Warning", "⚠️ Please train the model first!")
+        return
+    importances = rf_model.feature_importances_
+    feature_names = X.columns
+    importance_df = pd.DataFrame({'Feature': feature_names, 'Importance': importances})
+    importance_df = importance_df.sort_values(by='Importance', ascending=False)
+
+    info_text = "Feature Importances:\n"
+    for idx, row in importance_df.iterrows():
+        info_text += f"{row['Feature']}: {row['Importance']:.4f}\n"
+    messagebox.showinfo("Feature Importance", info_text)
+
+    fig, ax = plt.subplots(figsize=(13,5))
+    ax.barh(importance_df['Feature'], importance_df['Importance'], color='skyblue')
+    ax.invert_yaxis()
+    ax.set_xlabel("Importance")
+    ax.set_title("Feature Importance - RF")
+    ax.grid(axis='x')
+
+    fi_win = tk.Toplevel(root)
+    fi_win.title("Feature Importance")
+    canvas_fi = FigureCanvasTkAgg(fig, master=fi_win)
+    canvas_fi.draw()
+    canvas_fi.get_tk_widget().pack()
+
+tk.Label(main_frame, text="6. Feature Importance", font=("Arial", 12, "bold")).pack(pady=5)
+tk.Button(main_frame, text="Show Feature Importance", command=show_feature_importance).pack(pady=5)
+
+# -----------------------
 # Dataset Info
 # -----------------------
 info_frame = tk.Frame(main_frame)
