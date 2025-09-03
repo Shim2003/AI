@@ -121,10 +121,19 @@ tk.Label(main_frame, textvariable=result_text, justify="left", font=("Courier", 
 # Step 2.1: Random Training (Average over multiple runs)
 # -----------------------
 def random_training():
+    if X_train is None or X_test is None:
+        messagebox.showwarning("Warning", "⚠️ Please split the data first!")
+        return
+    
     try:
         n_runs = int(random_runs_var.get())
         if n_runs <= 0:
             raise ValueError("Number of runs must be > 0")
+
+        train_ratio = float(train_ratio_var.get())
+        if not 0.5 <= train_ratio <= 0.95:
+            raise ValueError("Train ratio must be between 0.5 and 0.95")
+        test_ratio = 1 - train_ratio
 
         acc_list = []
         for i in range(n_runs):
@@ -134,7 +143,7 @@ def random_training():
                 rs = None  # Fully random
 
             X_train_r, X_test_r, y_train_r, y_test_r = train_test_split(
-                X, y, test_size=0.2, stratify=y, random_state=rs
+                X, y, test_size=test_ratio, stratify=y, random_state=rs
             )
 
             scaler_r = StandardScaler()
@@ -172,7 +181,7 @@ def random_training():
         canvas = FigureCanvasTkAgg(fig, master=chart_win)
         canvas.draw()
         canvas.get_tk_widget().pack()
-        
+
     except Exception as e:
         messagebox.showerror("Error", str(e))
 
