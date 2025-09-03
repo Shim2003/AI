@@ -15,6 +15,7 @@ import seaborn as sns
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import warnings
 import joblib
+
 warnings.filterwarnings('ignore')
 
 # -------------------------
@@ -34,13 +35,20 @@ target_column = 'target'
 
 # Based on your EDA:
 categorical_cols = [
-    'sex', 'chest pain type', 'fasting blood sugar',
-    'resting ecg', 'exercise angina', 'ST slope'
+    'sex',
+    'chest pain type',
+    'fasting blood sugar',
+    'resting ecg',
+    'exercise angina',
+    'ST slope'
 ]
 
 numeric_cols = [
-    'age', 'resting bp s', 'cholesterol',
-    'max heart rate', 'oldpeak'
+    'age',
+    'resting bp s',
+    'cholesterol',
+    'max heart rate',
+    'oldpeak'
 ]
 
 # Which numeric columns were skewed in your plots
@@ -62,7 +70,11 @@ root.geometry("900x700")
 main_frame = tk.Frame(root)
 main_frame.pack(expand=True, fill="both", padx=20, pady=20)
 
-title_label = tk.Label(main_frame, text="Heart Disease: Enhanced KNN Model Trainer", font=("Arial", 16, "bold"))
+title_label = tk.Label(
+    main_frame,
+    text="Heart Disease: Enhanced KNN Model Trainer",
+    font=("Arial", 16, "bold")
+)
 title_label.pack(pady=(0, 20))
 
 # -------------------------
@@ -71,13 +83,14 @@ title_label.pack(pady=(0, 20))
 def build_knn_pipeline():
     """
     Preprocessing:
-      - PowerTransform skewed numeric columns (yeo-johnson)
-      - passthrough other numeric columns
-      - StandardScale all numeric outputs
-      - OneHotEncode categorical columns (drop='if_binary' to avoid trivial collinearity)
+    - PowerTransform skewed numeric columns (yeo-johnson)
+    - passthrough other numeric columns
+    - StandardScale all numeric outputs
+    - OneHotEncode categorical columns (drop='if_binary' to avoid trivial collinearity)
+
     Followed by:
-      - SelectKBest (mutual_info_classif)
-      - KNeighborsClassifier
+    - SelectKBest (mutual_info_classif)
+    - KNeighborsClassifier
     """
     # Apply PowerTransformer only to skewed columns and passthrough others
     numeric_power_ct = ColumnTransformer(
@@ -134,12 +147,10 @@ def open_split_dialog():
             train_part = int(train_ratio_var.get())
             test_part = 10 - train_part
             test_size = test_part / 10.0
-
             X = df.drop(target_column, axis=1)
             y = df[target_column]
 
             global X_train_raw, X_test_raw, y_train, y_test
-
             X_train_raw, X_test_raw, y_train, y_test = train_test_split(
                 X, y, test_size=test_size, stratify=y, random_state=42
             )
@@ -197,14 +208,12 @@ def find_best_k():
 
     k_range = range(1, 31)
     auc_scores = []
-
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
     for k in k_range:
         pipe = build_knn_pipeline()
-        # set reasonable KNN defaults for this search
         pipe.set_params(
-            select__k=5,  # Fixed: use integer instead of 'all'
+            select__k=5,
             knn__n_neighbors=k,
             knn__weights='distance',
             knn__metric='minkowski',
@@ -234,36 +243,32 @@ tk.Button(main_frame, text="Find Best K", command=find_best_k, width=30).pack(pa
 # -------------------------
 def tune_and_train():
     global final_knn, grid
-
     if X_train_raw is None:
         messagebox.showwarning("Warning", "Please configure train/test split first.")
         return
-
     try:
         # Show progress
         progress_win = tk.Toplevel()
         progress_win.title("Training in Progress...")
         progress_win.geometry("300x100")
         progress_win.grab_set()
-        tk.Label(progress_win, text="Training Enhanced KNN Model...\nThis may take a few minutes.", 
-                font=("Arial", 10)).pack(expand=True)
+        tk.Label(progress_win, text="Training Enhanced KNN Model...\nThis may take a few minutes.", font=("Arial", 10)).pack(expand=True)
         progress_win.update()
 
         pipe = build_knn_pipeline()
 
-        # Get total number of features after preprocessing to set reasonable k values
+        # Get total number of features after preprocessing
         pipe_temp = build_knn_pipeline()
         pipe_temp.fit(X_train_raw, y_train)
         n_features_after_preprocessing = pipe_temp.named_steps['preproc'].transform(X_train_raw).shape[1]
-        
-        # Set reasonable k values for feature selection (max should not exceed total features)
-        max_k = min(n_features_after_preprocessing, 10)
-        k_values = list(range(3, max_k + 1)) + [n_features_after_preprocessing]  # Include 'all features'
 
-        # Simplified grid for faster execution
+        # Set reasonable k values
+        max_k = min(n_features_after_preprocessing, 10)
+        k_values = list(range(3, max_k + 1)) + [n_features_after_preprocessing]
+
         param_grid = {
             'select__k': k_values,
-            'knn__n_neighbors': list(range(3, 16, 2)),  # Reduced range for faster execution
+            'knn__n_neighbors': list(range(3, 16, 2)),
             'knn__weights': ['uniform', 'distance'],
             'knn__metric': ['minkowski'],
             'knn__p': [1, 2]
@@ -285,7 +290,6 @@ def tune_and_train():
         # Evaluate on test
         proba = final_knn.predict_proba(X_test_raw)[:, 1]
         preds = (proba >= 0.5).astype(int)
-
         acc = accuracy_score(y_test, preds)
         auc = roc_auc_score(y_test, proba)
         report = classification_report(y_test, preds, output_dict=True)
@@ -296,11 +300,10 @@ def tune_and_train():
         result_win.title("Enhanced KNN Model Results")
         result_win.geometry("900x800")
 
-        # Create scrollable frame for results
+        # Create scrollable frame
         canvas_scroll = tk.Canvas(result_win)
         scrollbar = tk.Scrollbar(result_win, orient="vertical", command=canvas_scroll.yview)
         scrollable_frame = tk.Frame(canvas_scroll)
-
         canvas_scroll.configure(yscrollcommand=scrollbar.set)
         canvas_scroll.create_window((0, 0), window=scrollable_frame, anchor="nw")
 
@@ -309,7 +312,7 @@ def tune_and_train():
             f"✅ Best Parameters:\n{grid.best_params_}\n\n"
             f"✅ Best CV ROC-AUC: {grid.best_score_:.4f}\n"
             f"✅ Test Accuracy: {acc:.4f}\n"
-            f"✅ Test ROC-AUC:  {auc:.4f}\n\n"
+            f"✅ Test ROC-AUC: {auc:.4f}\n\n"
             f"✅ Classification Report:\n{report_df.round(3).to_string()}"
         )
         tk.Label(scrollable_frame, text=summary, justify="left", font=("Courier", 9), anchor="w").pack(padx=10, pady=10)
@@ -318,8 +321,7 @@ def tune_and_train():
         cm = confusion_matrix(y_test, preds)
         fig_cm, ax_cm = plt.subplots(figsize=(5, 4))
         sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax_cm,
-                    xticklabels=['No Disease', 'Disease'],
-                    yticklabels=['No Disease', 'Disease'])
+                    xticklabels=['No Disease', 'Disease'], yticklabels=['No Disease', 'Disease'])
         ax_cm.set_title("Confusion Matrix")
         ax_cm.set_ylabel("Actual")
         ax_cm.set_xlabel("Predicted")
@@ -332,7 +334,7 @@ def tune_and_train():
         fpr, tpr, _ = roc_curve(y_test, proba)
         fig_roc, ax_roc = plt.subplots(figsize=(5, 4))
         ax_roc.plot(fpr, tpr, label=f"AUC={auc:.3f}")
-        ax_roc.plot([0,1],[0,1],'--', linewidth=0.8, color='red', alpha=0.7)
+        ax_roc.plot([0, 1], [0, 1], '--', linewidth=0.8, color='red', alpha=0.7)
         ax_roc.set_title("ROC Curve")
         ax_roc.set_xlabel("False Positive Rate")
         ax_roc.set_ylabel("True Positive Rate")
@@ -346,7 +348,6 @@ def tune_and_train():
         # Configure scrollable region
         scrollable_frame.update_idletasks()
         canvas_scroll.configure(scrollregion=canvas_scroll.bbox("all"))
-
         canvas_scroll.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
@@ -365,8 +366,7 @@ tk.Button(main_frame, text="Train Enhanced KNN", command=tune_and_train, width=3
 # -------------------------
 info_frame = tk.Frame(main_frame)
 info_frame.pack(side="bottom", fill="x", pady=10)
-tk.Label(info_frame, text=f"Dataset: {df.shape[0]} rows × {df.shape[1]} columns", 
-         font=("Arial", 10), fg="gray").pack()
+tk.Label(info_frame, text=f"Dataset: {df.shape[0]} rows × {df.shape[1]} columns", font=("Arial", 10), fg="gray").pack()
 
 if __name__ == "__main__":
     root.mainloop()
