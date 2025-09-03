@@ -95,3 +95,12 @@ joblib.dump(pipeline, 'heart_disease_logreg_crossValidation_model.pkl')
 #     accuracy                           0.88       184
 #    macro avg       0.88      0.88      0.88       184
 # weighted avg       0.88      0.88      0.88       184
+
+# Barplot: Proportion of heart disease by sex
+# sns.barplot(x="sex", y="target", data=cleanedData, ci=None)
+
+# plt.xlabel("Sex (0 = Female, 1 = Male)")
+# plt.ylabel("Proportion with Heart Disease")
+# plt.title("Heart Disease Prevalence by Sex")
+# plt.ylim(0, 1)  # since it's proportion
+# plt.show()
