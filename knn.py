@@ -32,6 +32,7 @@ except FileNotFoundError:
 # Global / schema
 # -------------------------
 target_column = 'target'
+best_k = None
 
 # Based on your EDA:
 categorical_cols = [
@@ -226,11 +227,23 @@ def find_best_k():
             print(f"Error with k={k}: {e}")
             auc_scores.append(np.nan)
 
+    # Find best k
+    best_idx = int(np.nanargmax(auc_scores))
+    best_k_value = list(k_range)[best_idx]
+    best_auc_value = auc_scores[best_idx]
+
+    global best_k
+    best_k = best_k_value
+
+    # Plot
     plt.figure(figsize=(10, 6))
-    plt.plot(list(k_range), auc_scores, marker='o')
+    plt.plot(list(k_range), auc_scores, marker='o', label="CV ROC-AUC")
+    plt.scatter(best_k_value, best_auc_value, color='red', s=100, label=f"Best k={best_k_value}")
+
     plt.xlabel("k")
     plt.ylabel("CV ROC-AUC")
     plt.title("K vs Cross-Validated ROC-AUC (with preprocessing)")
+    plt.legend()
     plt.grid(True)
     plt.show()
 
@@ -239,7 +252,7 @@ tk.Label(main_frame, text="2. Find Best K (CV ROC-AUC)", font=("Arial", 12, "bol
 tk.Button(main_frame, text="Find Best K", command=find_best_k, width=30).pack(pady=5)
 
 # -------------------------
-# Enhanced KNN training & grid search (FIXED)
+# Enhanced KNN training & grid search
 # -------------------------
 def tune_and_train():
     global final_knn, grid
@@ -268,7 +281,7 @@ def tune_and_train():
 
         param_grid = {
             'select__k': k_values,
-            'knn__n_neighbors': list(range(3, 16, 2)),
+            'knn__n_neighbors': [best_k],
             'knn__weights': ['uniform', 'distance'],
             'knn__metric': ['minkowski'],
             'knn__p': [1, 2]
