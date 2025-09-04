@@ -111,17 +111,27 @@ tk.Label(main_frame, textvariable=result_text, justify="left", font=("Courier", 
 # Step 2.1: Random Training (Incremental Seed)
 # -----------------------
 def random_training_rf():
-    if X_train is None:
+    if X_train is None or X_test is None:
         messagebox.showwarning("Warning", "⚠️ Please split the data first!")
         return
+    
     try:
         n_runs = int(random_runs_var.get())
-        acc_list = []
+        if n_runs <= 0:
+            raise ValueError("Number of runs must be > 0")
+
         train_ratio = float(train_ratio_var.get())
+        if not 0.5 <= train_ratio <= 0.95:
+            raise ValueError("Train ratio must be between 0.5 and 0.95")
         test_ratio = 1 - train_ratio
 
+        acc_list = []
         for i in range(n_runs):
-            rs = i  # Incremental seed
+            if random_mode.get() == "increment":
+                rs = i  # Incremental seed
+            else:
+                rs = None  # Fully random
+
             X_train_r, X_test_r, y_train_r, y_test_r = train_test_split(
                 X, y, test_size=test_ratio, stratify=y, random_state=rs
             )
@@ -134,18 +144,25 @@ def random_training_rf():
             rf_model_r.fit(X_train_scaled_r, y_train_r)
 
             preds_r = rf_model_r.predict(X_test_scaled_r)
-            acc_list.append(accuracy_score(y_test_r, preds_r))
+            acc_r = accuracy_score(y_test_r, preds_r)
+            acc_list.append(acc_r)
 
         avg_acc = np.mean(acc_list)
         std_acc = np.std(acc_list)
-        random_result_text.set(f"✅ RF Random Training ({n_runs} runs)\nAverage Accuracy: {avg_acc:.4f}\nStd Dev: {std_acc:.4f}")
+        random_result_text.set(
+            f"✅ RF Random Training Done ({n_runs} runs)\n"
+            f"Average Accuracy: {avg_acc:.4f}\n"
+            f"Std Dev: {std_acc:.4f}"
+        )
 
-        # Plot line chart
-        fig, ax = plt.subplots(figsize=(6,4))
+        # -----------------------
+        # Show line chart of accuracies
+        # -----------------------
+        fig, ax = plt.subplots(figsize=(6, 4))
         ax.plot(range(1, n_runs+1), acc_list, marker='o', linestyle='-', color='green')
         ax.set_xlabel("Run Number")
         ax.set_ylabel("Accuracy")
-        ax.set_title("RF Accuracy per Run")
+        ax.set_title(f"Accuracy per Run ({n_runs} runs)")
         ax.grid(True)
 
         chart_win = tk.Toplevel(root)
@@ -153,16 +170,25 @@ def random_training_rf():
         canvas = FigureCanvasTkAgg(fig, master=chart_win)
         canvas.draw()
         canvas.get_tk_widget().pack()
+
     except Exception as e:
         messagebox.showerror("Error", str(e))
 
-tk.Label(main_frame, text="2.1 Random Training (Incremental Seed)", font=("Arial", 12, "bold")).pack(pady=5)
+tk.Label(main_frame, text="2.1 Random Training (Incremental / Fully Random)", font=("Arial", 12, "bold")).pack(pady=5)
 random_frame = tk.Frame(main_frame)
 random_frame.pack(pady=5)
 random_runs_var = tk.StringVar(value="10")
 tk.Label(random_frame, text="Number of runs:").pack(side="left", padx=5)
 tk.Entry(random_frame, textvariable=random_runs_var, width=10).pack(side="left")
 tk.Button(random_frame, text="Run Random Training", command=random_training_rf).pack(side="left", padx=10)
+
+mode_frame = tk.Frame(main_frame)
+mode_frame.pack(pady=5)
+tk.Label(mode_frame, text="Random Mode:").pack(side="left", padx=5)
+random_mode = tk.StringVar(value="increment")
+tk.Radiobutton(mode_frame, text="Incremental Seed (0,1,2...)", variable=random_mode, value="increment").pack(side="left")
+tk.Radiobutton(mode_frame, text="Fully Random (None)", variable=random_mode, value="none").pack(side="left")
+
 random_result_text = tk.StringVar()
 tk.Label(main_frame, textvariable=random_result_text, justify="left", font=("Courier", 10)).pack(pady=5)
 
