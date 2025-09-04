@@ -102,6 +102,47 @@ def get_lifestyle_recommendations(user_data, prediction_prob):
             'advice': 'Significant ST depression detected. This requires immediate medical attention and lifestyle modifications.',
             'priority': 'Critical'
         })
+
+    if prediction_prob > 0.5:  # model indicates disease risk
+        if user_data['st_slope'] == 3:
+            recommendations.append({
+                'category': 'ST Slope (Downsloping)',
+                'icon': '🫀',
+                'advice': 'Possible condition: **Acute Complete Obstructive Heart Disease**',
+                'priority': 'Critical'
+            })
+
+        if user_data['resting_bp'] >= 180:
+            recommendations.append({
+                'category': 'Blood Pressure Crisis',
+                'icon': '💥',
+                'advice': 'Possible condition: **Hypertensive Crisis → Acute Heart Failure or Stroke**',
+                'priority': 'Critical'
+            })
+
+        if user_data['cholesterol'] >= 300:
+            recommendations.append({
+                'category': 'Severe Hypercholesterolemia',
+                'icon': '🧬',
+                'advice': 'Possible condition: **Acute Artery Blockage (Myocardial Infarction)**',
+                'priority': 'Critical'
+            })
+
+        if user_data['oldpeak'] >= 3.0:
+            recommendations.append({
+                'category': 'Severe ST Depression',
+                'icon': '📉',
+                'advice': 'Possible condition: **Acute Ischemic Heart Disease / Myocardial Infarction**',
+                'priority': 'Critical'
+            })
+
+        if user_data['max_hr'] < 90:
+            recommendations.append({
+                'category': 'Very Low Heart Rate Response',
+                'icon': '⚡',
+                'advice': 'Possible condition: **Chronotropic Incompetence or Severe Coronary Artery Disease**',
+                'priority': 'High'
+            })
     
     # High-risk prediction recommendations
     if prediction_prob > 0.7:

@@ -15,6 +15,7 @@ import seaborn as sns
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import warnings
 import joblib
+from sklearn.calibration import CalibratedClassifierCV
 
 warnings.filterwarnings('ignore')
 
@@ -294,14 +295,15 @@ def tune_and_train():
 
         final_knn = grid.best_estimator_
         print("Grid search completed!")
-        joblib.dump(final_knn, "final_knn_model.pkl")
+
+        # Wrap with calibration
+        calibrated_knn = CalibratedClassifierCV(estimator=final_knn, method='sigmoid', cv=5)
+        calibrated_knn.fit(X_train_raw, y_train)
+        joblib.dump(calibrated_knn, "final_knn_model.pkl")
         print("Model saved as final_knn_model.pkl")
 
-        # Close progress window
-        progress_win.destroy()
-
-        # Evaluate on test
-        proba = final_knn.predict_proba(X_test_raw)[:, 1]
+        # Evaluate on test using calibrated model
+        proba = calibrated_knn.predict_proba(X_test_raw)[:, 1]
         preds = (proba >= 0.5).astype(int)
         acc = accuracy_score(y_test, preds)
         auc = roc_auc_score(y_test, proba)
