@@ -15,7 +15,7 @@ import seaborn as sns
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import warnings
 import joblib
-from sklearn.calibration import CalibratedClassifierCV
+from sklearn.calibration import CalibratedClassifierCV, FrozenEstimator
 
 warnings.filterwarnings('ignore')
 
@@ -297,7 +297,7 @@ def tune_and_train():
         print("Grid search completed!")
 
         # Wrap with calibration
-        calibrated_knn = CalibratedClassifierCV(estimator=final_knn, method='sigmoid', cv=5)
+        calibrated_knn = CalibratedClassifierCV(FrozenEstimator(final_knn), method='sigmoid')
         calibrated_knn.fit(X_train_raw, y_train)
         joblib.dump(calibrated_knn, "final_knn_model.pkl")
         print("Model saved as final_knn_model.pkl")
