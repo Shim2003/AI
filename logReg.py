@@ -1,12 +1,13 @@
 import pandas as pd
+import numpy as np
+import joblib
 import seaborn as sns
 import matplotlib.pyplot as plt
-import joblib
 
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.preprocessing import OneHotEncoder, StandardScaler, FunctionTransformer
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 
@@ -17,45 +18,62 @@ cleanedData = pd.read_csv('cleaned_heart_disease_data.csv')
 X = cleanedData.drop('target', axis=1)
 y = cleanedData['target']
 
-# 3. List of categorical columns to encode
+# 3. List of categorical and skewed columns
 categorical_cols = ['chest pain type', 'resting ecg', 'ST slope']
+skewed_cols = ['cholesterol', 'oldpeak']  # apply log transform
 
 # 4. Define preprocessing steps
 preprocessor = ColumnTransformer([
-    ('onehot', OneHotEncoder(handle_unknown='ignore'), categorical_cols)
+    ('onehot', OneHotEncoder(handle_unknown='ignore'), categorical_cols),
+    ('log', FunctionTransformer(np.log1p, validate=False), skewed_cols)
 ], remainder='passthrough')
 
-# 5. Create full pipeline: preprocess → scale → logistic regression
+# 5. Build pipeline: preprocess → scale → logistic regression
 pipeline = Pipeline([
     ('preprocess', preprocessor),
-    ('scale', StandardScaler(with_mean=False)),  # for sparse matrix
+    ('scale', StandardScaler(with_mean=False)),  # for sparse matrices
     ('logreg', LogisticRegression(max_iter=1000, random_state=42))
 ])
 
-# 6. Split dataset first (hold out test set!)
+# 6. Split dataset into train and test
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, stratify=y, random_state=42
+    X, y, test_size=0.3, stratify=y, random_state=42
 )
 
-# 7. Cross-validation only on training set
-cv_scores = cross_val_score(pipeline, X_train, y_train, cv=10, scoring='accuracy')
-print("Cross-Validation Accuracy Scores (train set only):", cv_scores)
-print("Average CV Accuracy:", cv_scores.mean())
-print("Standard Deviation:", cv_scores.std())
+# 7. Hyperparameter tuning with GridSearchCV
+param_grid = {
+    'logreg__C': [0.01, 0.1, 1, 10, 100],
+    'logreg__penalty': ['l1', 'l2'],  # L1 = Lasso, L2 = Ridge
+    'logreg__solver': ['liblinear']   # supports both L1 and L2
+}
 
-# 8. Retrain model on full training set
-pipeline.fit(X_train, y_train)
+grid = GridSearchCV(
+    pipeline,
+    param_grid,
+    cv=10,
+    scoring='accuracy',
+    n_jobs=-1
+)
 
-# 9. Predict and evaluate on test set
-y_pred = pipeline.predict(X_test)
+grid.fit(X_train, y_train)
+
+# 8. Best model from GridSearch
+best_model = grid.best_estimator_
+print("Best Params:", grid.best_params_)
+print("Best CV Accuracy:", grid.best_score_)
+
+# 9. Evaluate on hold-out test set
+y_pred = best_model.predict(X_test)
 
 print("\n--- Final Evaluation on Test Set ---")
 print("Test Accuracy:", accuracy_score(y_test, y_pred))
 print("\nClassification Report:\n", classification_report(y_test, y_pred))
 print("\nConfusion Matrix:\n", confusion_matrix(y_test, y_pred))
 
-# 10. Save the model
-joblib.dump(pipeline, 'heart_disease_logreg_crossValidation_model.pkl')
+# 10. Save the best model
+joblib.dump(best_model, 'heart_disease_logreg_model.pkl')
+print("\nModel saved as heart_disease_logreg_model.pkl")
+
 
 # clean and remove the "0" outliers which is only 1 and it's irrelevant
 # print(cleanedData['ST slope'].value_counts())
