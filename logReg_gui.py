@@ -257,16 +257,12 @@ def save_model():
     if model_fitted is None:
         messagebox.showwarning("Warning", "⚠️ Train the model first!")
         return
-    file_path = filedialog.asksaveasfilename(defaultextension=".pkl",
-                                             filetypes=[("Pickle Files", "*.pkl")])
-    if file_path:
-        joblib.dump(model_fitted, file_path)
-        messagebox.showinfo("Saved", f"✅ Model saved at:\n{file_path}")
+    joblib.dump(model_fitted, "heart_disease_logreg_model.pkl")
+    messagebox.showinfo("Saved", "✅ Model saved as heart_disease_logreg_model.pkl")
 
 
 tk.Label(frame, text="6. Save Model", font=("Arial", 12, "bold")).pack(pady=5)
 tk.Button(frame, text="Save Trained Model", command=save_model).pack(pady=5)
-
 
 # -----------------------
 # Dataset Info
